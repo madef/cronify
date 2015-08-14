@@ -13,19 +13,22 @@ require 'classes/attributes.php';
 require 'classes/output.php';
 require 'classes/validator.php';
 
+// Report all errors
 error_reporting(E_ALL);
 
-/* Autorise l'exécution infinie du script, en attente de connexion. */
+// No execution limit
 set_time_limit(0);
 
-/* Active le vidage implicite des buffers de sortie, pour que nous
- * puissions voir ce que nous lisons au fur et à mesure. */
+// Enable implicit flush output buffers, so we can read the output progressively
 ob_implicit_flush();
 
+// Get the configuration
 $config = json_decode(file_get_contents('config/srv.json'));
 
+// Load data adapter class
 $adapterClass = $config->data->adapterClass;
 require 'classes/dataAdapter/'.strtolower($adapterClass).'.php';
+
 // Force pre-loading data
 $adapter = $adapterClass::getInstance();
 
