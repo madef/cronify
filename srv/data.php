@@ -81,6 +81,7 @@ do {
                 break;
             case 'add':
                 execAdd($command['arguments']);
+                writeLine('1', $msgsock);
                 break;
             case 'list':
                 execList($command['arguments']);

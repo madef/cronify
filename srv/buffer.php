@@ -5,8 +5,9 @@
  *
  * Command supported :
  *    add class:<class> execMethod:<execMethod> [succesMethod:<succesMethod>] [errorMethod:<errorMethod> [date:<date>] [priority:<priority>(128)] [ttl:<ttl>(1h)] [retry:<retry counter>(0)] [data:<json data>({})]
- *    exec [id:<id>[,<id>]] [executed:<start date>..<end date>] [planned:<start date>..<end date>] [added:<start date>..<end date>] [class:<class>] [execMethod:<execMethod>] [succesMethod:<succesMethod>] [errorMethod:<errorMethod> [status:<status>] [priority:<priority>(128)] [ttl:<ttl>(1h)] [retry:<retry counter>(0)] [data:<json data>({})] [format:json|text(text)]
- *    list [id:<id>[,<id>]] [executed:<start date>..<end date>] [planned:<start date>..<end date>] [added:<start date>..<end date>] [class:<class>] [execMethod:<execMethod>] [succesMethod:<succesMethod>] [errorMethod:<errorMethod> [status:<status>] [priority:<priority>(128)] [ttl:<ttl>(1h)] [retry:<retry counter>(0)] [data:<json data>({})] [format:json|text(text)]
+ *    push # push the buffer in the data server
+ *    quit # close buffer
+ *    * # all other command will be send to the data server
  */
 
 require 'classes/attributes.php';
@@ -21,6 +22,7 @@ set_time_limit(0);
  * puissions voir ce que nous lisons au fur et à mesure. */
 ob_implicit_flush();
 
+$buffer = array();
 $config = json_decode(file_get_contents('config/srv.json'));
 
 $address = $config->buffer->address;
@@ -83,25 +85,116 @@ do {
                 case 'quit':
                     break;
                 case 'add':
-                    execAdd($command['arguments']);
+                    execAdd($command['arguments'], $buf);
+                    break;
+                case 'push':
+                    try {
+                        push();
+                    } catch (Exception $e) {
+                        writeLine($e->getMessage(), $msgsock);
+                    }
                     break;
                 default:
-                    writeLine("[ERROR] Unknow command \"{$command['command']}\"", $msgsock);
+                    execCommand($buf);
             }
         } while (true);
+
+        try {
+            push();
+        } catch (Exception $e) {
+            writeLine($e->getMessage(), $msgsock);
+        }
     }
     socket_close($msgsock);
 } while ($pid > 0);
 
 socket_close($sock);
 
-function execAdd($arguments)
+function execAdd($arguments, $command)
 {
+    global $buffer;
     // @TODO
 
     // Validate
 
     // Execute
+    $buffer[] = $command;
 }
 
-?>
+function execCommand($command)
+{
+    global $msgsock;
+
+    $result = sendCommand($command);
+
+    foreach ($result as $line) {
+        writeLine(trim($line), $msgsock);
+    }
+}
+
+/**
+ * Send command to the data server
+ */
+function sendCommand($command)
+{
+    global $config;
+
+    $dataSocket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+    if (socket_connect($dataSocket, $config->data->address, $config->data->port) === false) {
+        throw new Exception("[ERROR] Cannot connect to the data server");
+    }
+    // Ignore first message
+    do {
+        $res = socket_read($dataSocket, 1024);
+    } while ($res == '');
+
+    writeLine($command, $dataSocket);
+    $result = array();
+    do {
+        $res = socket_read($dataSocket, 1024);
+        if (!empty($res)) {
+            $result[] = $res;
+        }
+    } while ($res == '');
+
+    // Close connection
+    writeLine('quit', $dataSocket);
+
+    socket_close($dataSocket);
+
+    return $result;
+}
+
+/**
+ * Push the buffer to the data server
+ */
+function push()
+{
+    global $buffer, $config;
+
+    if (!count($buffer)) {
+        return;
+    }
+
+    $dataSocket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+    if (socket_connect($dataSocket, $config->data->address, $config->data->port) === false) {
+        throw new Exception("[ERROR] Cannot connect to the data server");
+    }
+    // Ignore first message
+    do {
+        $res = socket_read($dataSocket, 1024);
+    } while ($res == '');
+
+    foreach ($buffer as $i => $command) {
+        writeLine($command, $dataSocket);
+        $result = socket_read($dataSocket, 1024);
+        if ($result === "1\n") {
+            unset($buffer[$i]);
+        }
+    }
+
+    // Close connection
+    writeLine('quit', $dataSocket);
+
+    socket_close($dataSocket);
+}
