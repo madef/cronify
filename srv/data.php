@@ -98,7 +98,11 @@ do {
                 }
                 break;
             case 'list':
-                execList($command['arguments']);
+                try {
+                    execList($command['arguments'], $msgsock);
+                } catch (Exception $e) {
+                    writeLine($e->getMessage(), $msgsock);
+                }
                 break;
             default:
                 writeLine("[ERROR] Unknow command \"{$command['command']}\"", $msgsock);
@@ -125,6 +129,26 @@ function execAdd($arguments)
     }
     $data->updateRealPriority($adapter->getAvgDelay());
     $adapter->add($data);
+}
+
+function execList($arguments, $msgsock)
+{
+    global $adapter;
+
+    // Validate
+    validateList($arguments);
+
+    $collection = array();
+    foreach ($adapter->getCollection() as $data) {
+        if (!matchFilter($data, $arguments)) {
+            continue;
+        }
+
+        $collection[] = $data;
+
+        //writeLine("{$data->plannedAt}", $msgsock);
+    }
+    writeLine(json_encode($collection, JSON_PRETTY_PRINT), $msgsock);
 }
 
 function hardSaveData($force = false)
