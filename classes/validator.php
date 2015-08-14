@@ -7,7 +7,7 @@ function validateAndFormatAdd(&$attributes)
         'execMethod' => array('type' => 'regex', 'value' => '[a-z_0-9]+'),
         'successMethod' => array('type' => 'regex', 'value' => '[a-z_0-9]+', 'nullable' => true),
         'errorMethod' => array('type' => 'regex', 'value' => '[a-z_0-9]+', 'nullable' => true),
-        'date' => array('type' => 'regex', 'value' => '[0-9]+'),
+        'plannedAt' => array('type' => 'regex', 'value' => '[0-9]+'),
         'priority' => array('type' => 'int', 'ge' => 0, 'lt' => 256),
         'ttl' => array('type' => 'int', 'gt' => 0),
         'retry' => array('type' => 'int', 'ge' => 0),
@@ -17,10 +17,11 @@ function validateAndFormatAdd(&$attributes)
     $defaultValues = array(
         'successMethod' => null,
         'errorMethod' => null,
-        'date' => time(),
+        'plannedAt' => time(),
         'priority' => 128,
         'ttl' => 60,
         'retry' => 0,
+        'retryDelay' => 60,
         'data' => '{}',
     );
 

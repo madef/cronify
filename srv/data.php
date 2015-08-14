@@ -10,7 +10,8 @@
  */
 
 require 'classes/attributes.php';
-require 'classes/writelines.php';
+require 'classes/output.php';
+require 'classes/validator.php';
 
 error_reporting(E_ALL);
 
@@ -22,6 +23,11 @@ set_time_limit(0);
 ob_implicit_flush();
 
 $config = json_decode(file_get_contents('config/srv.json'));
+
+$adapterClass = $config->data->adapterClass;
+require 'classes/dataAdapter/'.strtolower($adapterClass).'.php';
+// Force pre-loading data
+$adapter = $adapterClass::getInstance();
 
 $address = $config->data->address;
 $port = $config->data->port;
@@ -46,6 +52,7 @@ do {
         echo "socket_accept() a échoué : raison : " . socket_strerror(socket_last_error($sock)) . "\n";
         break;
     }
+
     /* Send instructions. */
     $msg = "\Welcome to the cronify server data.\n" .
         "To quit, enter 'quit'. To stop the server, enter 'shutdown'.\n";
@@ -72,16 +79,20 @@ do {
             writeLine($e->getMessage(), $msgsock);
             continue;
         }
-        var_export($command);
 
         switch ($command['command']) {
             case 'quit':
                 break;
             case 'shutdown':
+                hardSaveData(true);
                 break;
             case 'add':
-                execAdd($command['arguments']);
-                writeLine('1', $msgsock);
+                try {
+                    execAdd($command['arguments']);
+                    writeLine('1', $msgsock);
+                } catch (Exception $e) {
+                    writeLine($e->getMessage(), $msgsock);
+                }
                 break;
             case 'list':
                 execList($command['arguments']);
@@ -89,6 +100,8 @@ do {
             default:
                 writeLine("[ERROR] Unknow command \"{$command['command']}\"", $msgsock);
         }
+
+        hardSaveData();
     } while (true);
     socket_close($msgsock);
 } while (true);
@@ -97,11 +110,30 @@ socket_close($sock);
 
 function execAdd($arguments)
 {
-    // @TODO
+    global $adapter;
 
     // Validate
+    validateAndFormatAdd($arguments);
 
     // Execute
+    $data = new Data();
+    foreach ($arguments as $key => $value) {
+        $data->$key = $value;
+    }
+    $data->updateRealPriority($adapter->getAvgDelay());
+    $adapter->add($data);
+}
+
+function hardSaveData($force = false)
+{
+    global $config, $adapter;
+
+    static $lastSave = 0;
+
+    if ($force || $adapter->hasUpdated() && time() - $lastSave > $config->data->hardSaveDelay) {
+        $lastSave = time();
+        $adapter->save();
+    }
 }
 
 ?>
