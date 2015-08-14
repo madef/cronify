@@ -1,5 +1,17 @@
 #!/usr/local/bin/php -q
 <?php
+/**
+ * Buffer server to send commande to the data server
+ *
+ * Command supported :
+ *    add class:<class> execMethod:<execMethod> [succesMethod:<succesMethod>] [errorMethod:<errorMethod> [date:<date>] [priority:<priority>(128)] [ttl:<ttl>(1h)] [retry:<retry counter>(0)] [data:<json data>({})]
+ *    exec [id:<id>[,<id>]] [executed:<start date>..<end date>] [planned:<start date>..<end date>] [added:<start date>..<end date>] [class:<class>] [execMethod:<execMethod>] [succesMethod:<succesMethod>] [errorMethod:<errorMethod> [status:<status>] [priority:<priority>(128)] [ttl:<ttl>(1h)] [retry:<retry counter>(0)] [data:<json data>({})] [format:json|text(text)]
+ *    list [id:<id>[,<id>]] [executed:<start date>..<end date>] [planned:<start date>..<end date>] [added:<start date>..<end date>] [class:<class>] [execMethod:<execMethod>] [succesMethod:<succesMethod>] [errorMethod:<errorMethod> [status:<status>] [priority:<priority>(128)] [ttl:<ttl>(1h)] [retry:<retry counter>(0)] [data:<json data>({})] [format:json|text(text)]
+ */
+
+require 'classes/attributes.php';
+require 'classes/writelines.php';
+
 error_reporting(E_ALL);
 
 /* Autorise l'exécution infinie du script, en attente de connexion. */
@@ -11,19 +23,22 @@ ob_implicit_flush();
 
 $config = json_decode(file_get_contents('config/srv.json'));
 
-$address = $config->address;
-$port = $config->port;
+$address = $config->data->address;
+$port = $config->data->port;
 
 if (($sock = socket_create(AF_INET, SOCK_STREAM, SOL_TCP)) === false) {
     echo "socket_create() a échoué : raison : " . socket_strerror(socket_last_error()) . "\n";
+    die();
 }
 
 if (socket_bind($sock, $address, $port) === false) {
     echo "socket_bind() a échoué : raison : " . socket_strerror(socket_last_error($sock)) . "\n";
+    die();
 }
 
 if (socket_listen($sock, 5) === false) {
     echo "socket_listen() a échoué : raison : " . socket_strerror(socket_last_error($sock)) . "\n";
+    die();
 }
 
 do {
@@ -67,6 +82,9 @@ do {
             case 'add':
                 execAdd($command['arguments']);
                 break;
+            case 'list':
+                execList($command['arguments']);
+                break;
             default:
                 writeLine("[ERROR] Unknow command \"{$command['command']}\"", $msgsock);
         }
@@ -85,29 +103,4 @@ function execAdd($arguments)
     // Execute
 }
 
-function writeLine($message, $sock)
-{
-    $message .= "\n";
-    socket_write($sock, $message, strlen($message));
-}
-
-function explodeAttributes($string)
-{
-    $words = str_getcsv($string, ' ');
-
-    $command = array(
-        'command' => $words[0],
-        'arguments' => array(),
-    );
-
-    for ($i = 1; $i <= count($words) - 1; $i++) {
-        if (strpos($words[$i], ':') === false) {
-            throw new Exception("[ERROR] Missing value for the attribute \"{$words[$i]}\"");
-        }
-        list($argument, $value) = str_getcsv($words[$i], ':' );
-        $command['arguments'][$argument] = $value;
-    }
-
-    return $command;
-}
 ?>
