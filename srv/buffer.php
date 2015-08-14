@@ -11,7 +11,8 @@
  */
 
 require 'classes/attributes.php';
-require 'classes/writelines.php';
+require 'classes/output.php';
+require 'classes/validator.php';
 
 error_reporting(E_ALL);
 
@@ -85,11 +86,16 @@ do {
                 case 'quit':
                     break;
                 case 'add':
-                    execAdd($command['arguments'], $buf);
+                    try {
+                        execAdd($command['arguments'], $buf);
+                    } catch (Exception $e) {
+                        writeLine($e->getMessage(), $msgsock);
+                    }
                     break;
                 case 'push':
                     try {
                         push();
+                        writeLine('Everything is pushed', $msgsock);
                     } catch (Exception $e) {
                         writeLine($e->getMessage(), $msgsock);
                     }
@@ -99,11 +105,15 @@ do {
             }
         } while (true);
 
-        try {
-            push();
-        } catch (Exception $e) {
-            writeLine($e->getMessage(), $msgsock);
-        }
+        $error = false;
+        do {
+            try {
+                push();
+            } catch (Exception $e) {
+                writeLine($e->getMessage(), $msgsock);
+                $error = true;
+            }
+        } while ($error == true);
     }
     socket_close($msgsock);
 } while ($pid > 0);
@@ -113,9 +123,9 @@ socket_close($sock);
 function execAdd($arguments, $command)
 {
     global $buffer;
-    // @TODO
 
     // Validate
+    validateAndFormatAdd($arguments);
 
     // Execute
     $buffer[] = $command;
