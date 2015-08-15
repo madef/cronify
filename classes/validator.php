@@ -3,6 +3,7 @@
 function validateAndFormatAdd(&$attributes)
 {
     $format = array(
+        'id' => array('type' => 'regex', 'value' => '[a-f_0-9]+', 'nullable' => true),
         'class' => array('type' => 'regex', 'value' => '[a-z_0-9]+'),
         'execMethod' => array('type' => 'regex', 'value' => '[a-z_0-9]+'),
         'successMethod' => array('type' => 'regex', 'value' => '[a-z_0-9]+', 'nullable' => true),
@@ -15,6 +16,7 @@ function validateAndFormatAdd(&$attributes)
     );
 
     $defaultValues = array(
+        'id' => null,
         'successMethod' => null,
         'errorMethod' => null,
         'plannedAt' => time(),
@@ -38,9 +40,47 @@ function validateAndFormatAdd(&$attributes)
     return true;
 }
 
+function validateUpdate(&$attributes)
+{
+    $format = array(
+        'id' => array('type' => 'regex', 'value' => '[a-f_0-9]+'),
+        'class' => array('type' => 'regex', 'value' => '[a-z_0-9]+'),
+        'execMethod' => array('type' => 'regex', 'value' => '[a-z_0-9]+'),
+        'successMethod' => array('type' => 'regex', 'value' => '[a-z_0-9]+', 'nullable' => true),
+        'errorMethod' => array('type' => 'regex', 'value' => '[a-z_0-9]+', 'nullable' => true),
+        'plannedAt' => array('type' => 'regex', 'value' => '[0-9]+'),
+        'priority' => array('type' => 'int', 'ge' => 0, 'lt' => 256),
+        'ttl' => array('type' => 'int', 'gt' => 0),
+        'retry' => array('type' => 'int', 'ge' => 0),
+        'data' => array('type' => 'json'),
+        'lastStatus' => array('type' => 'list', 'values' => array(
+            Task::STATUS_PENDING,
+            Task::STATUS_ERROR,
+            Task::STATUS_RUNNING,
+            Task::STATUS_SUCCESS,
+
+        )),
+    );
+
+    if (empty($attributes['id'])) {
+        throw new Exception("[ERROR] Missing argument \"id\"");
+    }
+
+    foreach ($format as $attribute => $validator) {
+        if (!array_key_exists($attribute, $attributes)) {
+            continue;
+        }
+        if (!validateField($attributes[$attribute], $validator)) {
+            throw new Exception("[ERROR] Bad format for argument \"{$attribute}\"");
+        }
+    }
+    return true;
+}
+
 function validateList($attributes)
 {
     $format = array(
+        'id' => array('type' => 'regex', 'value' => '[a-f_0-9]+'),
         'class' => array('type' => 'regex', 'value' => '[a-z_0-9]+'),
         'execMethod' => array('type' => 'regex', 'value' => '[a-z_0-9]+'),
         'successMethod' => array('type' => 'regex', 'value' => '[a-z_0-9]+'),
@@ -91,6 +131,8 @@ function validateField($value, $validator)
                 return false;
             }
             return true;
+        case 'list':
+            return in_array($value, $validator['values']);
         case 'json':
             return !(json_decode($value) === null);
     }
@@ -105,7 +147,7 @@ function setDefault(&$attributes, $defaultValue)
     }
 }
 
-function matchFilter($data, $attributes)
+function matchFilter($task, $attributes)
 {
     foreach ($attributes as $key => $value) {
         // 3 types of format :
@@ -114,28 +156,28 @@ function matchFilter($data, $attributes)
         //   ???     : exact match
         //   ~???    : rexep
 
-        $dataValue = $data->$key;
+        $taskValue = $task->$key;
         if (strpos($value, '..') !== false) {
             list($between, $and) = explode('..', $value);
             $between = converteDate($between);
             $and = converteDate($and);
-            if ($dataValue < $between || $dataValue > $and) {
+            if ($taskValue < $between || $taskValue > $and) {
                 return false;
             }
         } else if (strpos($value, '~') === 0) {
             $value = substr($value, 1);
-            if (!preg_match("/$value/Usi", $dataValue)) {
+            if (!preg_match("/$value/Usi", $taskValue)) {
                 return false;
             }
         } else if (preg_match('/^(\d+,)+\d+$/Usi', $value)
             || preg_match('/^([a-z]+,)+[a-z]+$/Usi', $value)
         ) {
             $values = explode(',', $value);
-            if (!in_array($dataValue, $values)) {
+            if (!in_array($taskValue, $values)) {
                 return false;
             }
         } else {
-            if ($value != $dataValue) {
+            if ($value != $taskValue) {
                 return false;
             }
         }

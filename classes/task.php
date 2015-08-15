@@ -1,12 +1,13 @@
 <?php
 
-class Data
+class Task
 {
-    const STATUS_PENDING = 0;
-    const STATUS_ERROR = -1;
-    const STATUS_RUNNING = 1;
-    const STATUS_SUCCESS = 2;
+    const STATUS_PENDING = 'pending';
+    const STATUS_ERROR = 'error';
+    const STATUS_RUNNING = 'running';
+    const STATUS_SUCCESS = 'success';
 
+    public $id = null;
     public $class = null;
     public $execMethod = null;
     public $succesMethod = null;
@@ -21,18 +22,34 @@ class Data
     public $executedAt = null;
     public $plannedAt = null;
     public $insertedAt = null;
+    public $updatedAt = null;
     public $lastError = null;
     public $lastStatus = self::STATUS_PENDING;
-    public $history = array(); // { status => ..., 'error' => ..., 'date' => ... }
+    public $history = array(); // { status => ..., 'retry' => ..., 'error' => ..., 'date' => ... }
 
     public function __construct()
     {
-        $this->history[] = array(
-            'status' => self::STATUS_PENDING,
-            'error' => null,
-            'date' => time(),
-        );
         $this->insertedAt = time();
+    }
+
+    public function update()
+    {
+        $this->updatedAt = time();
+
+        $lastHistory = end($this->history);
+        if ($lastHistory['status'] == $this->lastStatus
+            && $lastHistory['error'] == $this->lastError
+            &&  $lastHistory['retry'] == $this->retry
+        ) {
+            return $this;
+        }
+
+        $this->history[] = array(
+            'status' => $this->lastStatus,
+            'retry' => $this->retry,
+            'error' => $this->lastError,
+            'date' => $this->updatedAt,
+        );
     }
 
     public function updateRealPriority($avgDelay)

@@ -5,9 +5,11 @@
  *
  * Command supported :
  *    add class:<class> execMethod:<execMethod> [succesMethod:<succesMethod>] [errorMethod:<errorMethod> [date:<date>] [priority:<priority>(128)] [ttl:<ttl>(1h)] [retry:<retry counter>(0)] [data:<json data>({})]
+ *    update [id:<id>[,<id>]] [executed:<start date>..<end date>] [planned:<start date>..<end date>] [added:<start date>..<end date>] [class:<class>] [execMethod:<execMethod>] [succesMethod:<succesMethod>] [errorMethod:<errorMethod> [status:<status>] [priority:<priority>(128)] [ttl:<ttl>(1h)] [retry:<retry counter>(0)] [data:<json data>({})] [format:json|text(text)]
+ *    list [id:<id>[,<id>]] [executed:<start date>..<end date>] [planned:<start date>..<end date>] [added:<start date>..<end date>] [class:<class>] [execMethod:<execMethod>] [succesMethod:<succesMethod>] [errorMethod:<errorMethod> [status:<status>] [priority:<priority>(128)] [ttl:<ttl>(1h)] [retry:<retry counter>(0)] [data:<json data>({})] [format:json|text(text)]
+ *    execute [id:<id>[,<id>]] [executed:<start date>..<end date>] [planned:<start date>..<end date>] [added:<start date>..<end date>] [class:<class>] [execMethod:<execMethod>] [succesMethod:<succesMethod>] [errorMethod:<errorMethod> [status:<status>] [priority:<priority>(128)] [ttl:<ttl>(1h)] [retry:<retry counter>(0)] [data:<json data>({})] [format:json|text(text)]
  *    push # push the buffer in the data server
  *    quit # close buffer
- *    * # all other command will be send to the data server
  */
 
 require 'classes/attributes.php';
@@ -63,8 +65,8 @@ do {
     if (!$pid) {
         /* Send instructions. */
         $msg = "\Welcome to the cronify server data buffer.\n" .
-            "To quit, enter 'quit'.\n";
-        socket_write($msgsock, $msg, strlen($msg));
+            "To quit, enter 'quit'.";
+        writeNewLine($msg, $msgsock);
 
         do {
             if (false === ($buf = socket_read($msgsock, 2048, PHP_NORMAL_READ))) {
@@ -81,7 +83,7 @@ do {
             try {
                 $command = explodeAttributes($buf);
             } catch (Exception $e) {
-                writeLine($e->getMessage(), $msgsock);
+                writeNewLine($e->getMessage(), $msgsock);
                 continue;
             }
 
@@ -92,15 +94,22 @@ do {
                     try {
                         execAdd($command['arguments'], $buf);
                     } catch (Exception $e) {
-                        writeLine($e->getMessage(), $msgsock);
+                        writeNewLine($e->getMessage(), $msgsock);
+                    }
+                    break;
+                case 'update':
+                    try {
+                        execUpdate($command['arguments'], $buf);
+                    } catch (Exception $e) {
+                        writeNewLine($e->getMessage(), $msgsock);
                     }
                     break;
                 case 'push':
                     try {
                         push();
-                        writeLine('Everything is pushed', $msgsock);
+                        writeNewLine('Everything is pushed', $msgsock);
                     } catch (Exception $e) {
-                        writeLine($e->getMessage(), $msgsock);
+                        writeNewLine($e->getMessage(), $msgsock);
                     }
                     break;
                 default:
@@ -113,7 +122,7 @@ do {
             try {
                 push();
             } catch (Exception $e) {
-                writeLine($e->getMessage(), $msgsock);
+                writeNewLine($e->getMessage(), $msgsock);
                 $error = true;
             }
         } while ($error == true);
@@ -134,15 +143,24 @@ function execAdd($arguments, $command)
     $buffer[] = $command;
 }
 
+function execUpdate($arguments, $command)
+{
+    global $buffer;
+
+    // Validate
+    validateUpdate($arguments);
+
+    // Execute
+    $buffer[] = $command;
+}
+
 function execCommand($command)
 {
     global $msgsock;
 
     $result = sendCommand($command);
 
-    foreach ($result as $line) {
-        writeLine(trim($line), $msgsock);
-    }
+    writeNewLine(trim($result), $msgsock);
 }
 
 /**
@@ -156,22 +174,24 @@ function sendCommand($command)
     if (socket_connect($dataSocket, $config->data->address, $config->data->port) === false) {
         throw new Exception("[ERROR] Cannot connect to the data server");
     }
+
     // Ignore first message
     do {
-        $res = socket_read($dataSocket, 1024);
-    } while ($res == '');
+        $res = socket_read($dataSocket, 2048);
+    } while (strlen($res) == 2048 && $res[2047] != "\0");
 
-    writeLine($command, $dataSocket);
-    $result = array();
+    writeNewLine($command, $dataSocket);
+
+    $result = '';
     do {
-        $res = socket_read($dataSocket, 1024);
+        $res = socket_read($dataSocket, 2048);
         if (!empty($res)) {
-            $result[] = $res;
+            $result .= $res;
         }
-    } while ($res == '');
+    } while (strlen($res) == 2048 && $res[2047] != "\0");
 
     // Close connection
-    writeLine('quit', $dataSocket);
+    writeNewLine('quit', $dataSocket);
 
     socket_close($dataSocket);
 
@@ -195,19 +215,19 @@ function push()
     }
     // Ignore first message
     do {
-        $res = socket_read($dataSocket, 1024);
-    } while ($res == '');
+        $res = socket_read($dataSocket, 2048);
+    } while ($res != '');
 
     foreach ($buffer as $i => $command) {
-        writeLine($command, $dataSocket);
-        $result = socket_read($dataSocket, 1024);
+        writeNewLine($command, $dataSocket);
+        $result = socket_read($dataSocket, 2048);
         if ($result === "1\n") {
             unset($buffer[$i]);
         }
     }
 
     // Close connection
-    writeLine('quit', $dataSocket);
+    writeNewLine('quit', $dataSocket);
 
     socket_close($dataSocket);
 }
