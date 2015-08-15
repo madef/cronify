@@ -43,6 +43,6 @@ Start the servers :
 
 Connect to the buffer:
 ```
-$ telnet 127.0.0.1 8000
+$ telnet 127.0.0.1 8001
 ```
 
