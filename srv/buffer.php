@@ -15,6 +15,7 @@
 require 'classes/attributes.php';
 require 'classes/output.php';
 require 'classes/validator.php';
+require 'classes/task.php';
 
 // Report all errors
 error_reporting(E_ALL);
@@ -77,7 +78,7 @@ do {
             if (!$buf = trim($buf)) {
                 continue;
             }
-            if ($buf == 'quit') {
+            if ($buf == 'quit' || $buf == 'shutdown') {
                 break;
             }
             try {
@@ -89,10 +90,12 @@ do {
 
             switch ($command['command']) {
                 case 'quit':
+                case 'shutdown':
                     break;
                 case 'add':
                     try {
                         execAdd($command['arguments'], $buf);
+                        writeNewLine('1', $msgsock);
                     } catch (Exception $e) {
                         writeNewLine($e->getMessage(), $msgsock);
                     }
@@ -100,6 +103,15 @@ do {
                 case 'update':
                     try {
                         execUpdate($command['arguments'], $buf);
+                        writeNewLine('1', $msgsock);
+                    } catch (Exception $e) {
+                        writeNewLine($e->getMessage(), $msgsock);
+                    }
+                    break;
+                case 'execute':
+                    try {
+                        execExecute($command['arguments'], $buf);
+                        writeNewLine('1', $msgsock);
                     } catch (Exception $e) {
                         writeNewLine($e->getMessage(), $msgsock);
                     }
@@ -152,6 +164,36 @@ function execUpdate($arguments, $command)
 
     // Execute
     $buffer[] = $command;
+}
+
+function execExecute($arguments)
+{
+    // Validate
+    validateExecute($arguments);
+
+    // Command
+    $command = 'list';
+    foreach ($arguments as $key => $value) {
+        $command .= ' '.$key.':'.$value;
+    }
+
+    // Get list
+    $result = sendCommand($command);
+    $result = trim($result);
+
+    $dataCollection = json_decode($result, false);
+
+    foreach ($dataCollection as $data) {
+        $task = Task::populate($data);
+
+        // Execute
+        $task->execute();
+
+        // Update task
+        $command = "update id:{$task->id} error:\"".$task->lastError."\" retry:{$task->retry}";
+        sendCommand($command);
+    }
+
 }
 
 function execCommand($command)

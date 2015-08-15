@@ -12,5 +12,8 @@
         "port": "8000",
         "adapterClass": "FileSystem",
         "hardSaveDelay": 5
+    },
+    "task": {
+        "runCommand": "php example/run.php"
     }
 }

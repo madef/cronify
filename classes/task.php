@@ -12,7 +12,6 @@ class Task
     public $execMethod = null;
     public $succesMethod = null;
     public $errorMethod = null;
-    public $date = null;
     public $priority = null;
     public $realPriority = null;
     public $ttl = null;
@@ -58,5 +57,70 @@ class Task
             $this->realPriority = $this->priority;
         }
         $this->realPriority = min(256, $this->priority + 128 - (time() - $this->plannedAt) / $avgDelay * 128);
+    }
+
+    public function execute()
+    {
+        // Get the configuration
+        $config = json_decode(file_get_contents('config/srv.json'));
+
+        $class = escapeshellcmd($this->class);
+        $method = escapeshellcmd($this->execMethod);
+        $data = escapeshellcmd($this->data);
+        $command = "{$config->task->runCommand} {$class} {$method} {$data}";
+
+        exec($command, $output);
+        $result = json_decode($output[0]);
+
+        if (!$result->success) {
+            $this->lastError = $result->message;
+            $this->lastStatus = self::STATUS_ERROR;
+            $this->retry = ($this->retry > 1) ? ($this->retry - 1) : 0;
+
+            if (empty($this->errorMethod)) {
+                return;
+            }
+
+            $method = escapeshellcmd($this->errorMethod);
+            $command = "{$config->task->runCommand} {$class} {$method} {$data}";
+
+            exec($command, $output);
+            $result = json_decode($output[0]);
+
+        } else {
+            $this->lastError = null;
+            $this->lastStatus = self::STATUS_SUCCESS;
+
+            if (empty($this->successMethod)) {
+                return;
+            }
+
+            $method = escapeshellcmd($this->successMethod);
+            $command = "{$config->task->runCommand} {$class} {$method} {$data}";
+
+            exec($command, $output);
+            $result = json_decode($output[0]);
+        }
+
+        if (isset($result->data->status)) {
+            $this->lastStatus = $result->data->status;
+        }
+        if (isset($result->data->retry)) {
+            $this->retry = $result->data->retry;
+        }
+        if (isset($result->data->error)) {
+            $this->lastError = $result->data->error;
+        }
+
+        return $this;
+    }
+
+    public static function populate($data)
+    {
+        $task = new Task();
+        foreach ($data as $key => $value) {
+            $task->$key = $value;
+        }
+        return $task;
     }
 }
