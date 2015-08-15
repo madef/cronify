@@ -38,7 +38,7 @@ Usage
 Start the servers :
 
 ```
-zsh:1: command not found: q
+# ./run.sh
 ```
 
 Connect to the buffer:
