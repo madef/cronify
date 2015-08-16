@@ -125,7 +125,11 @@ do {
                     }
                     break;
                 default:
-                    execCommand($buf);
+                    try {
+                        execCommand($buf);
+                    } catch (Exception $e) {
+                        writeNewLine($e->getMessage(), $msgsock);
+                    }
             }
         } while (true);
 
@@ -183,14 +187,28 @@ function execExecute($arguments)
 
     $dataCollection = json_decode($result, false);
 
+    // Lock tasks
+    foreach ($dataCollection as $data) {
+        $command = "update id:{$data->id} lastStatus:".Task::STATUS_LOCKED;
+        echo $command."\n";
+        sendCommand($command);
+    }
+
+    // Run Tasks
     foreach ($dataCollection as $data) {
         $task = Task::populate($data);
+
+        // Update task
+        $command = "update id:{$task->id} lastStatus:".Task::STATUS_RUNNING;
+        echo $command."\n";
+        sendCommand($command);
 
         // Execute
         $task->execute();
 
         // Update task
-        $command = "update id:{$task->id} error:\"".$task->lastError."\" retry:{$task->retry}";
+        $command = "update id:{$task->id} lastStatus:{$task->lastStatus} error:\"".addslashes($task->lastError)."\" retry:{$task->retry}";
+        echo $command."\n";
         sendCommand($command);
     }
 
@@ -251,25 +269,14 @@ function push()
         return;
     }
 
-    $dataSocket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
-    if (socket_connect($dataSocket, $config->data->address, $config->data->port) === false) {
-        throw new Exception("[ERROR] Cannot connect to the data server");
-    }
-    // Ignore first message
-    do {
-        $res = socket_read($dataSocket, 2048);
-    } while ($res != '');
-
     foreach ($buffer as $i => $command) {
-        writeNewLine($command, $dataSocket);
-        $result = socket_read($dataSocket, 2048);
-        if ($result === "1\n") {
+        var_export($command);
+        $result = sendCommand($command);
+        var_export($result);
+        if (trim($result) === "1") {
             unset($buffer[$i]);
         }
     }
-
-    // Close connection
-    writeNewLine('quit', $dataSocket);
 
     socket_close($dataSocket);
 }

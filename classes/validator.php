@@ -55,6 +55,7 @@ function validateUpdate(&$attributes)
         'data' => array('type' => 'json'),
         'lastStatus' => array('type' => 'list', 'values' => array(
             Task::STATUS_PENDING,
+            Task::STATUS_LOCKED,
             Task::STATUS_ERROR,
             Task::STATUS_RUNNING,
             Task::STATUS_SUCCESS,

@@ -4,6 +4,7 @@ class Task
 {
     const STATUS_PENDING = 'pending';
     const STATUS_ERROR = 'error';
+    const STATUS_LOCKED = 'locked';
     const STATUS_RUNNING = 'running';
     const STATUS_SUCCESS = 'success';
 
